@@ -1,0 +1,57 @@
+service: marketpowerpro-client-customs-sls-framework
+
+# Use the serverless-webpack plugin to transpile ES6
+plugins:
+  - serverless-webpack
+  - serverless-offline
+  - serverless-pseudo-parameters
+
+# serverless-webpack configuration
+# TODO: Update [client-name] with client name.
+# Enable auto-packing of external modules
+custom:
+  stage: ${opt:stage, self:provider.stage}
+  pseudoParameters:
+    allowReferences: false
+  ssmParamNamespace: /mpp-clients/[client-name]/${self:custom.stage}
+  snsTopicName: mpp-[client-name]-custom-api-${self:custom.stage}-topics
+  webpack:
+    webpackConfig: ./webpack.config.js
+    includeModules: true
+
+provider:
+  name: aws
+  runtime: nodejs8.10
+  stage: dev
+  region: us-east-1
+  environment: ${file(env.yml):${self:custom.stage}}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+        - ssm:PutParameter
+        - ssm:GetParameters
+        - ssm:GetParametersByPath
+        - ssm:GetParameterHistory
+      Resource:
+        - "arn:aws:ssm:#{AWS::Region}:#{AWS::AccountId}:parameter${self:custom.ssmParamNamespace}/*"
+    - Effect: Allow
+      Action:
+        - sns:Publish
+      Resource:
+        - "arn:aws:sns:#{AWS::Region}:#{AWS::AccountId}:${self:custom.snsTopicName}"
+        - 'Fn::ImportValue': 'MPPClientsInternalTopicArn-${self:custom.stage}'
+    - Effect: Allow
+      Action:
+        - sqs:DeleteMessage
+        - sqs:GetQueueUrl
+        - sqs:SendMessage
+        - sqs:GetQueueAttributes
+        - sqs:ChangeMessageVisibility
+      Resource:
+        - 'Fn::ImportValue': 'LambdaRetriesQueueArn-${self:custom.stage}'
+functions:
+# TODO: Put handler functions here...
+
+resources:
+  - ${file(resources/sns-topic.yml)}
